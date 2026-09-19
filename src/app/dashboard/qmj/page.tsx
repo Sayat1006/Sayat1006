@@ -1,7 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Check,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { DashboardHeader } from "@/components/dashboard/header";
@@ -17,24 +27,36 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   GRADES,
+  LANGUAGES,
   LESSON_DURATIONS,
   LESSON_TYPES,
   SUBJECTS,
 } from "@/lib/dashboard/constants";
-import { buildQmjContent, lessonStages, defaultSelectedStageIds } from "@/lib/dashboard/mock-data";
-import type { QmjContent } from "@/lib/dashboard/types";
-import { useGeneration } from "@/lib/dashboard/use-generation";
-import { chargeForGenerationAction, refundGenerationAction } from "@/lib/actions/tokens";
+import { lessonStages, defaultSelectedStageIds } from "@/lib/dashboard/mock-data";
+import { useAiGeneration } from "@/lib/dashboard/use-ai-generation";
+import { generateQmjAction } from "@/lib/actions/ai";
 import { TOKEN_COSTS } from "@/lib/tokens/costs";
+import type { QMJOutput, QmjLessonStage } from "@/lib/ai/generators/qmj";
 import { cn } from "@/lib/utils";
 
 const steps = ["Негізгі ақпарат", "Оқу мақсаты", "Сабақ құрылымы", "Дайын нәтиже"];
 const generationSteps = [
-  "Тақырыпты талдау",
-  "Оқу мақсатын сәйкестендіру",
-  "Сабақ кезеңдерін құрастыру",
-  "ҚМЖ құжатын дайындау",
+  "Сұранысты талдау…",
+  "Оқу мақсаттарын сәйкестендіру…",
+  "Сабақ құрылымын жоспарлау…",
+  "Тапсырмаларды құрастыру…",
+  "Бағалау критерийлерін дайындау…",
+  "ҚМЖ құжатын дайындау…",
 ];
+
+const emptyStage: QmjLessonStage = {
+  stage: "Жаңа кезең",
+  duration: "5 минут",
+  teacherActivity: "",
+  studentActivity: "",
+  assessment: "",
+  resources: "",
+};
 
 interface Step1 {
   subject: string;
@@ -42,6 +64,7 @@ interface Step1 {
   topic: string;
   duration: string;
   lessonType: string;
+  language: string;
 }
 
 interface Step2 {
@@ -58,18 +81,58 @@ export default function QmjPage() {
     topic: "",
     duration: LESSON_DURATIONS[1],
     lessonType: LESSON_TYPES[0],
+    language: LANGUAGES[0],
   });
   const [step2, setStep2] = useState<Step2>({ objective: "", goal: "", criteria: "" });
   const [stageIds, setStageIds] = useState<string[]>(defaultSelectedStageIds);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [content, setContent] = useState<QmjContent | null>(null);
+  const [qmj, setQmj] = useState<QMJOutput | null>(null);
   const [editing, setEditing] = useState(false);
-  const [charging, setCharging] = useState(false);
 
-  const { status, activeStep, start } = useGeneration(generationSteps, 500);
+  const { status, activeStep, run } = useAiGeneration(generationSteps, 900);
+  // A ref (not state) so a double-click can never fire two generations —
+  // state updates aren't synchronous, but this guard is.
+  const busyRef = useRef(false);
 
   function toggleStage(id: string) {
     setStageIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  }
+
+  async function requestGeneration(): Promise<boolean> {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+
+    const stageLabels = lessonStages.filter((s) => stageIds.includes(s.id)).map((s) => s.label);
+
+    try {
+      const result = await run(() =>
+        generateQmjAction({
+          subject: step1.subject,
+          grade: step1.grade,
+          topic: step1.topic,
+          duration: step1.duration,
+          lessonType: step1.lessonType,
+          language: step1.language,
+          learningObjective: step2.objective,
+          lessonGoal: step2.goal,
+          assessmentCriteria: step2.criteria,
+          stageLabels,
+        }),
+      );
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error ?? "ҚМЖ жасау кезінде қате пайда болды.");
+      }
+
+      setQmj(result.data);
+      toast.success(`ҚМЖ дайын! 🎉 −${TOKEN_COSTS.qmj} S-Token`);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "ҚМЖ жасау кезінде қате пайда болды.");
+      return false;
+    } finally {
+      busyRef.current = false;
+    }
   }
 
   async function goNext() {
@@ -100,37 +163,9 @@ export default function QmjPage() {
         return;
       }
 
-      setCharging(true);
-      const charge = await chargeForGenerationAction("qmj");
-      setCharging(false);
-
-      if (!charge.success) {
-        toast.error(charge.error ?? "Токенді есептен шығару мүмкін болмады.");
-        return;
-      }
-
       setStep(4);
-      start(() => {
-        try {
-          const stageLabels = lessonStages
-            .filter((s) => stageIds.includes(s.id))
-            .map((s) => s.label);
-          setContent(
-            buildQmjContent({
-              subject: step1.subject,
-              grade: step1.grade,
-              topic: step1.topic,
-              objective: step2.objective,
-              goal: step2.goal,
-              stageLabels,
-            }),
-          );
-          toast.success(`ҚМЖ дайын! −${TOKEN_COSTS.qmj} S-Token`);
-        } catch {
-          void refundGenerationAction("qmj", charge.transactionId);
-          toast.error("Дайындау кезінде қате пайда болды. Токен қайтарылды.");
-        }
-      });
+      const ok = await requestGeneration();
+      if (!ok) setStep(3);
       return;
     }
     setErrors({});
@@ -141,22 +176,84 @@ export default function QmjPage() {
     setStep((s) => Math.max(s - 1, 1));
   }
 
-  const copyText = content
+  async function regenerate() {
+    if (status === "generating") return;
+    await requestGeneration();
+  }
+
+  function updateField<K extends keyof QMJOutput>(key: K, value: QMJOutput[K]) {
+    setQmj((c) => (c ? { ...c, [key]: value } : c));
+  }
+
+  function updateListField(key: "learningObjectives" | "lessonObjectives" | "assessmentCriteria", text: string) {
+    updateField(key, text.split("\n"));
+  }
+
+  function updateStage(index: number, patch: Partial<QmjLessonStage>) {
+    setQmj((c) => {
+      if (!c) return c;
+      const lessonStages = [...c.lessonStages];
+      lessonStages[index] = { ...lessonStages[index], ...patch };
+      return { ...c, lessonStages };
+    });
+  }
+
+  function addStage() {
+    setQmj((c) => (c ? { ...c, lessonStages: [...c.lessonStages, { ...emptyStage }] } : c));
+  }
+
+  function removeStage(index: number) {
+    setQmj((c) => {
+      if (!c) return c;
+      if (c.lessonStages.length <= 1) {
+        toast.error("Кемінде бір кезең қалуы керек");
+        return c;
+      }
+      return { ...c, lessonStages: c.lessonStages.filter((_, i) => i !== index) };
+    });
+  }
+
+  function moveStage(index: number, direction: -1 | 1) {
+    setQmj((c) => {
+      if (!c) return c;
+      const target = index + direction;
+      if (target < 0 || target >= c.lessonStages.length) return c;
+      const lessonStages = [...c.lessonStages];
+      [lessonStages[index], lessonStages[target]] = [lessonStages[target], lessonStages[index]];
+      return { ...c, lessonStages };
+    });
+  }
+
+  const copyText = qmj
     ? [
-        `Сабақтың тақырыбы: ${content.topic}`,
-        `Оқу мақсаты: ${content.learningObjective}`,
-        `Сабақ мақсаты: ${content.lessonGoal}`,
+        `Сабақтың тақырыбы: ${qmj.title}`,
+        `Пән: ${qmj.subject} · Сынып: ${qmj.grade} · Ұзақтығы: ${qmj.duration}`,
+        "",
+        "Оқу мақсаты:",
+        ...qmj.learningObjectives.map((o) => `- ${o}`),
+        "",
+        "Сабақ мақсаты:",
+        ...qmj.lessonObjectives.map((o) => `- ${o}`),
+        "",
+        "Бағалау критерийлері:",
+        ...qmj.assessmentCriteria.map((c) => `- ${c}`),
         "",
         "Сабақтың барысы:",
-        ...content.rows.map(
-          (r) => `${r.stage} — ${r.teacherAction} / ${r.studentAction} / ${r.assessment} / ${r.resources}`,
+        ...qmj.lessonStages.map(
+          (r) =>
+            `${r.stage} (${r.duration}) — ${r.teacherActivity} / ${r.studentActivity} / ${r.assessment} / ${r.resources}`,
         ),
+        "",
+        `Саралау: ${qmj.differentiation}`,
+        `Қауіпсіздік: ${qmj.safety}`,
+        `Рефлексия: ${qmj.reflection}`,
+        `Үй тапсырмасы: ${qmj.homework}`,
       ].join("\n")
     : "";
 
   return (
     <div className="space-y-8">
-      <DashboardHeader title="ҚМЖ генераторы" description="Қысқа мерзімді жоспарды 4 қадамда дайындаңыз." />
+      <DashboardHeader title="ҚМЖ генераторы" description="Қысқа мерзімді жоспарды AI көмегімен 4 қадамда дайындаңыз." />
 
       <StepIndicator steps={steps} current={step} />
 
@@ -198,6 +295,13 @@ export default function QmjPage() {
               options={LESSON_TYPES}
               value={step1.lessonType}
               onChange={(v) => setStep1((s) => ({ ...s, lessonType: v }))}
+            />
+            <SelectField
+              label="Тіл"
+              options={LANGUAGES}
+              value={step1.language}
+              onChange={(v) => setStep1((s) => ({ ...s, language: v }))}
+              className="sm:col-span-2"
             />
           </div>
         </div>
@@ -276,27 +380,42 @@ export default function QmjPage() {
 
       {step === 4 ? (
         <div className="space-y-6">
-          {status !== "done" ? (
+          {status === "generating" ? (
             <div className="rounded-2xl border border-primary/10 bg-surface p-6 shadow-soft sm:p-8">
               <GenerationProgress steps={generationSteps} activeStep={activeStep} />
             </div>
-          ) : content ? (
+          ) : qmj ? (
             <>
-              <DocumentPreview title="Сабақтың тақырыбы" subtitle={content.topic}>
+              <DocumentPreview
+                title="Сабақтың тақырыбы"
+                subtitle={`${qmj.subject} · ${qmj.grade}-сынып · ${qmj.duration}`}
+              >
                 <dl className="space-y-5">
+                  <div>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Сабақ тақырыбы</dt>
+                    <dd className="mt-1.5 text-sm font-semibold text-primary">
+                      {editing ? (
+                        <Input value={qmj.title} onChange={(e) => updateField("title", e.target.value)} />
+                      ) : (
+                        qmj.title
+                      )}
+                    </dd>
+                  </div>
                   <div>
                     <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Оқу мақсаты</dt>
                     <dd className="mt-1.5 text-sm text-primary/85">
                       {editing ? (
                         <Textarea
-                          value={content.learningObjective}
-                          onChange={(e) =>
-                            setContent((c) => (c ? { ...c, learningObjective: e.target.value } : c))
-                          }
-                          rows={2}
+                          value={qmj.learningObjectives.join("\n")}
+                          onChange={(e) => updateListField("learningObjectives", e.target.value)}
+                          rows={3}
                         />
                       ) : (
-                        content.learningObjective
+                        <ul className="list-disc space-y-1 pl-5">
+                          {qmj.learningObjectives.map((o, i) => (
+                            <li key={i}>{o}</li>
+                          ))}
+                        </ul>
                       )}
                     </dd>
                   </div>
@@ -305,65 +424,95 @@ export default function QmjPage() {
                     <dd className="mt-1.5 text-sm text-primary/85">
                       {editing ? (
                         <Textarea
-                          value={content.lessonGoal}
-                          onChange={(e) =>
-                            setContent((c) => (c ? { ...c, lessonGoal: e.target.value } : c))
-                          }
-                          rows={2}
+                          value={qmj.lessonObjectives.join("\n")}
+                          onChange={(e) => updateListField("lessonObjectives", e.target.value)}
+                          rows={3}
                         />
                       ) : (
-                        content.lessonGoal
+                        <ul className="list-disc space-y-1 pl-5">
+                          {qmj.lessonObjectives.map((o, i) => (
+                            <li key={i}>{o}</li>
+                          ))}
+                        </ul>
                       )}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                      Жетістік критерийлері
+                      Бағалау критерийлері
                     </dt>
-                    <dd className="mt-1.5">
-                      <ul className="list-disc space-y-1 pl-5 text-sm text-primary/85">
-                        {content.successCriteria.map((c) => (
-                          <li key={c}>{c}</li>
-                        ))}
-                      </ul>
+                    <dd className="mt-1.5 text-sm text-primary/85">
+                      {editing ? (
+                        <Textarea
+                          value={qmj.assessmentCriteria.join("\n")}
+                          onChange={(e) => updateListField("assessmentCriteria", e.target.value)}
+                          rows={3}
+                        />
+                      ) : (
+                        <ul className="list-disc space-y-1 pl-5">
+                          {qmj.assessmentCriteria.map((c, i) => (
+                            <li key={i}>{c}</li>
+                          ))}
+                        </ul>
+                      )}
                     </dd>
                   </div>
                 </dl>
 
-                <h3 className="font-display mt-8 mb-3 text-base font-bold text-primary">
-                  Сабақтың барысы
-                </h3>
+                <div className="mt-8 mb-3 flex items-center justify-between">
+                  <h3 className="font-display text-base font-bold text-primary">Сабақтың барысы</h3>
+                  {editing ? (
+                    <Button variant="secondary" size="sm" onClick={addStage}>
+                      <Plus className="size-3.5" />
+                      Кезең қосу
+                    </Button>
+                  ) : null}
+                </div>
                 <div className="overflow-x-auto rounded-xl border border-primary/8">
-                  <table className="w-full min-w-[720px] border-collapse text-sm">
+                  <table className="w-full min-w-[820px] border-collapse text-sm">
                     <thead>
                       <tr className="bg-[#fbfcfe] text-left text-xs font-semibold uppercase tracking-wide text-muted">
                         <th className="border-b border-primary/8 px-4 py-3">Кезең</th>
+                        <th className="border-b border-primary/8 px-4 py-3">Уақыты</th>
                         <th className="border-b border-primary/8 px-4 py-3">Мұғалім әрекеті</th>
                         <th className="border-b border-primary/8 px-4 py-3">Оқушы әрекеті</th>
                         <th className="border-b border-primary/8 px-4 py-3">Бағалау</th>
                         <th className="border-b border-primary/8 px-4 py-3">Ресурстар</th>
+                        {editing ? <th className="border-b border-primary/8 px-2 py-3" /> : null}
                       </tr>
                     </thead>
                     <tbody>
-                      {content.rows.map((row, i) => (
-                        <tr key={row.stage} className={i % 2 === 1 ? "bg-[#fbfcfe]/60" : undefined}>
-                          <td className="border-b border-primary/6 px-4 py-3 font-semibold text-primary align-top">
-                            {row.stage}
+                      {qmj.lessonStages.map((row, i) => (
+                        <tr key={i} className={i % 2 === 1 ? "bg-[#fbfcfe]/60" : undefined}>
+                          <td className="border-b border-primary/6 px-4 py-3 align-top font-semibold text-primary">
+                            {editing ? (
+                              <input
+                                value={row.stage}
+                                onChange={(e) => updateStage(i, { stage: e.target.value })}
+                                className="w-full rounded-lg border border-primary/10 bg-surface p-2 text-xs font-semibold outline-none focus:border-cyan/40"
+                              />
+                            ) : (
+                              row.stage
+                            )}
                           </td>
-                          {(["teacherAction", "studentAction", "assessment", "resources"] as const).map(
+                          <td className="border-b border-primary/6 px-4 py-3 align-top text-primary/80">
+                            {editing ? (
+                              <input
+                                value={row.duration}
+                                onChange={(e) => updateStage(i, { duration: e.target.value })}
+                                className="w-full rounded-lg border border-primary/10 bg-surface p-2 text-xs outline-none focus:border-cyan/40"
+                              />
+                            ) : (
+                              row.duration
+                            )}
+                          </td>
+                          {(["teacherActivity", "studentActivity", "assessment", "resources"] as const).map(
                             (field) => (
                               <td key={field} className="border-b border-primary/6 px-4 py-3 align-top text-primary/80">
                                 {editing ? (
                                   <textarea
                                     value={row[field]}
-                                    onChange={(e) =>
-                                      setContent((c) => {
-                                        if (!c) return c;
-                                        const rows = [...c.rows];
-                                        rows[i] = { ...rows[i], [field]: e.target.value };
-                                        return { ...c, rows };
-                                      })
-                                    }
+                                    onChange={(e) => updateStage(i, { [field]: e.target.value })}
                                     className="w-full resize-y rounded-lg border border-primary/10 bg-surface p-2 text-xs outline-none focus:border-cyan/40"
                                     rows={2}
                                   />
@@ -373,27 +522,111 @@ export default function QmjPage() {
                               </td>
                             ),
                           )}
+                          {editing ? (
+                            <td className="border-b border-primary/6 px-2 py-3 align-top">
+                              <div className="flex flex-col items-center gap-1">
+                                <button
+                                  type="button"
+                                  aria-label="Жоғары жылжыту"
+                                  disabled={i === 0}
+                                  onClick={() => moveStage(i, -1)}
+                                  className="inline-flex size-6 items-center justify-center rounded-full text-muted hover:bg-primary/5 disabled:opacity-30"
+                                >
+                                  <ArrowUp className="size-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label="Төмен жылжыту"
+                                  disabled={i === qmj.lessonStages.length - 1}
+                                  onClick={() => moveStage(i, 1)}
+                                  className="inline-flex size-6 items-center justify-center rounded-full text-muted hover:bg-primary/5 disabled:opacity-30"
+                                >
+                                  <ArrowDown className="size-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label="Кезеңді жою"
+                                  onClick={() => removeStage(i)}
+                                  className="inline-flex size-6 items-center justify-center rounded-full text-danger/70 hover:bg-danger/10"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+
+                <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">Саралау</h4>
+                    <div className="mt-1.5 text-sm text-primary/85">
+                      {editing ? (
+                        <Textarea value={qmj.differentiation} onChange={(e) => updateField("differentiation", e.target.value)} rows={3} />
+                      ) : (
+                        qmj.differentiation
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">Қауіпсіздік</h4>
+                    <div className="mt-1.5 text-sm text-primary/85">
+                      {editing ? (
+                        <Textarea value={qmj.safety} onChange={(e) => updateField("safety", e.target.value)} rows={3} />
+                      ) : (
+                        qmj.safety
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">Рефлексия</h4>
+                    <div className="mt-1.5 text-sm text-primary/85">
+                      {editing ? (
+                        <Textarea value={qmj.reflection} onChange={(e) => updateField("reflection", e.target.value)} rows={3} />
+                      ) : (
+                        qmj.reflection
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">Үй тапсырмасы</h4>
+                    <div className="mt-1.5 text-sm text-primary/85">
+                      {editing ? (
+                        <Textarea value={qmj.homework} onChange={(e) => updateField("homework", e.target.value)} rows={3} />
+                      ) : (
+                        qmj.homework
+                      )}
+                    </div>
+                  </div>
+                </div>
               </DocumentPreview>
 
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <ExportButtons
-                  editing={editing}
-                  onToggleEdit={() => setEditing((v) => !v)}
-                  copyText={copyText}
-                  documentName={`ҚМЖ — ${content.topic}`}
-                />
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <ExportButtons
+                    editing={editing}
+                    onToggleEdit={() => setEditing((v) => !v)}
+                    copyText={copyText}
+                    copyToastMessage="ҚМЖ көшірілді."
+                    documentName={`ҚМЖ — ${qmj.title}`}
+                  />
+                  <Button variant="secondary" size="sm" onClick={regenerate}>
+                    <RotateCcw className="size-3.5" />
+                    Қайта жасау
+                  </Button>
+                </div>
                 <SaveMaterialButton
                   type="qmj"
-                  title={content.topic}
-                  subject={step1.subject}
-                  grade={step1.grade}
-                  content={{ ...content }}
-                  metadata={{ duration: step1.duration, lessonType: step1.lessonType }}
+                  title={qmj.title}
+                  subject={qmj.subject || step1.subject}
+                  grade={qmj.grade || step1.grade}
+                  content={{ ...qmj }}
+                  metadata={{ duration: step1.duration, lessonType: step1.lessonType, language: step1.language }}
+                  savedMessage="ҚМЖ материалдарыңызға сақталды."
+                  viewLinkLabel="Менің материалдарыма өту"
                 />
               </div>
             </>
@@ -407,11 +640,11 @@ export default function QmjPage() {
             <ArrowLeft className="size-4" />
             Артқа
           </Button>
-          <Button variant="gradient" onClick={goNext} disabled={charging}>
+          <Button variant="gradient" onClick={goNext}>
             {step === 3 ? (
               <>
                 <Sparkles className="size-4" />
-                {charging ? "Тексерілуде..." : "ҚМЖ жасау"}
+                ҚМЖ жасау
               </>
             ) : (
               <>

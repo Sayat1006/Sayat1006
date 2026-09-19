@@ -16,6 +16,8 @@ interface SaveMaterialButtonProps {
   grade?: string;
   content: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  savedMessage?: string;
+  viewLinkLabel?: string;
 }
 
 function SaveMaterialButton({
@@ -25,6 +27,8 @@ function SaveMaterialButton({
   grade,
   content,
   metadata,
+  savedMessage = "Материал сақталды",
+  viewLinkLabel = "Материалдарды көру",
 }: SaveMaterialButtonProps) {
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
 
@@ -38,9 +42,7 @@ function SaveMaterialButton({
       return;
     }
 
-    toast.success("Материал сақталды", {
-      description: "«Менің материалдарым» бөлімінен таба аласыз.",
-    });
+    toast.success(savedMessage);
     setState("saved");
   }
 
@@ -61,7 +63,7 @@ function SaveMaterialButton({
       </Button>
       {state === "idle" ? null : (
         <Link href="/dashboard/materials" className="text-xs font-medium text-primary/60 hover:underline">
-          Материалдарды көру
+          {viewLinkLabel}
         </Link>
       )}
     </div>

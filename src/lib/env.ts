@@ -40,6 +40,12 @@ export const env = {
   get supabaseServiceRoleKey() {
     return required("SUPABASE_SERVICE_ROLE_KEY");
   },
+  get openaiApiKey() {
+    return required("OPENAI_API_KEY");
+  },
+  get openaiModel() {
+    return process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+  },
 };
 
 /** True once every variable required for the database/auth layer is present. */
@@ -53,4 +59,9 @@ export function isSupabaseConfigured(): boolean {
 
 export function isAuthConfigured(): boolean {
   return Boolean(process.env.NEXTAUTH_SECRET) && isSupabaseConfigured();
+}
+
+/** True once an OpenAI API key is present. Generators must check this before spending tokens. */
+export function isOpenAIConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
 }

@@ -45,22 +45,6 @@ export interface LessonStage {
   description: string;
 }
 
-export interface QmjRow {
-  stage: string;
-  teacherAction: string;
-  studentAction: string;
-  assessment: string;
-  resources: string;
-}
-
-export interface QmjContent {
-  topic: string;
-  learningObjective: string;
-  lessonGoal: string;
-  successCriteria: string[];
-  rows: QmjRow[];
-}
-
 export type QuestionType =
   | "single"
   | "multiple"

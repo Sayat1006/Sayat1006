@@ -3,7 +3,6 @@ import type {
   ChatMessage,
   CreditPackage,
   LessonStage,
-  QmjContent,
   ScenarioSection,
   Slide,
   TestQuestion,
@@ -12,10 +11,12 @@ import type {
 
 // Note: teacher profile, token balance/history, and the materials library
 // are now real, per-user data loaded from Supabase (see lib/services/*)
-// instead of the Stage 2 mock arrays that used to live here. What remains
-// below is genuinely mock: placeholder pricing copy, the assistant's
-// canned replies, and the content generators that stand in for a real AI
-// call — none of that is user data, so it stays mock by design.
+// instead of the Stage 2 mock arrays that used to live here. ҚМЖ generation
+// is now real too (see lib/ai/generators/qmj.ts). What remains below is
+// genuinely mock: placeholder pricing copy, the assistant's canned
+// replies, and the remaining content generators that stand in for a real
+// AI call until they're migrated the same way — none of that is user
+// data, so it stays mock by design.
 
 export const creditPackages: CreditPackage[] = [
   {
@@ -77,40 +78,6 @@ const mockAssistantReplies = [
 
 export function getMockAssistantReply(index: number) {
   return mockAssistantReplies[index % mockAssistantReplies.length];
-}
-
-export function buildQmjContent(params: {
-  subject: string;
-  grade: string;
-  topic: string;
-  objective: string;
-  goal: string;
-  stageLabels: string[];
-}): QmjContent {
-  const topic = params.topic || "Жаңа тақырып";
-  const rowsSource = params.stageLabels.length
-    ? params.stageLabels
-    : ["Қызығушылықты ояту", "Жаңа сабақ", "Бекіту"];
-
-  return {
-    topic,
-    learningObjective:
-      params.objective ||
-      `${params.grade}.${params.subject.slice(0, 1)}.1 — ${topic} тақырыбы бойынша негізгі заңдылықтарды түсіндіру.`,
-    lessonGoal: params.goal || `Оқушылар «${topic}» тақырыбының негізгі ұғымдарын меңгереді және тәжірибеде қолдана алады.`,
-    successCriteria: [
-      `«${topic}» тақырыбына қатысты негізгі терминдерді атайды`,
-      "Құбылысты күнделікті өмірден мысалмен түсіндіреді",
-      "Есептеу немесе талдау тапсырмасын дербес орындайды",
-    ],
-    rows: rowsSource.map((stage) => ({
-      stage,
-      teacherAction: `${stage} кезеңінде мұғалім тапсырма мен нұсқаулық ұсынады, сұрақтар қояды.`,
-      studentAction: `Оқушылар ${stage.toLowerCase()} аясында белсенді қатысады, талқылайды, орындайды.`,
-      assessment: "Ауызша кері байланыс / дескриптор бойынша бағалау",
-      resources: "Оқулық, слайд, жұмыс парағы",
-    })),
-  };
 }
 
 export function buildTestQuestions(params: {

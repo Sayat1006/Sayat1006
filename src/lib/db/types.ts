@@ -74,3 +74,21 @@ export interface TokenTransaction {
   reference_id: string | null;
   created_at: string;
 }
+
+export type AIGenerationType = MaterialType | "assistant";
+export type AIGenerationStatusDb = "success" | "failed";
+
+export interface AIGenerationLog {
+  id: string;
+  user_id: string;
+  type: AIGenerationType;
+  model: string;
+  status: AIGenerationStatusDb;
+  token_cost: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  input_metadata: Record<string, unknown>;
+  output_metadata: Record<string, unknown>;
+  created_at: string;
+}

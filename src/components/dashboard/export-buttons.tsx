@@ -10,6 +10,7 @@ type ExportAction = "edit" | "copy" | "docx" | "pdf" | "print";
 interface ExportButtonsProps {
   actions?: ExportAction[];
   copyText?: string;
+  copyToastMessage?: string;
   editing?: boolean;
   onToggleEdit?: () => void;
   documentName?: string;
@@ -19,6 +20,7 @@ interface ExportButtonsProps {
 function ExportButtons({
   actions = ["edit", "copy", "docx", "pdf"],
   copyText,
+  copyToastMessage = "Мазмұн көшірілді",
   editing,
   onToggleEdit,
   documentName = "Материал",
@@ -29,7 +31,7 @@ function ExportButtons({
       if (copyText) {
         await navigator.clipboard.writeText(copyText);
       }
-      toast.success("Мазмұн көшірілді");
+      toast.success(copyToastMessage);
     } catch {
       toast.error("Көшіру мүмкін болмады");
     }
