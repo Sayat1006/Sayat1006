@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Manrope } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({
@@ -28,6 +29,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col bg-background text-foreground font-sans">
         {children}
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            classNames: {
+              toast:
+                "rounded-2xl! border! border-primary/10! bg-surface! shadow-lifted! text-primary!",
+              title: "font-semibold!",
+              description: "text-muted!",
+            },
+          }}
+        />
       </body>
     </html>
   );

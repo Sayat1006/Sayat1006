@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 
@@ -55,9 +56,11 @@ function Hero() {
             transition={{ duration: 0.55, delay: 0.18 }}
             className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center"
           >
-            <Button variant="gradient" size="lg" className="w-full sm:w-auto">
-              <Sparkles className="size-4" />
-              Сабақ жасау
+            <Button variant="gradient" size="lg" className="w-full sm:w-auto" asChild>
+              <Link href="/dashboard">
+                <Sparkles className="size-4" />
+                Сабақ жасау
+              </Link>
             </Button>
             <a
               href="#how-it-works"

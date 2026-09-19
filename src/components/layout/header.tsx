@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Globe, Menu, X } from "lucide-react";
 
@@ -67,11 +68,11 @@ function Header() {
             <Globe className="size-4" />
             KZ
           </button>
-          <Button variant="ghost" size="sm">
-            Кіру
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/dashboard">Кіру</Link>
           </Button>
-          <Button variant="gradient" size="sm">
-            Тегін бастау
+          <Button variant="gradient" size="sm" asChild>
+            <Link href="/dashboard">Тегін бастау</Link>
           </Button>
         </div>
 
@@ -142,11 +143,15 @@ function Header() {
                   <Globe className="size-4" />
                   KZ
                 </button>
-                <Button variant="secondary" size="lg" className="w-full">
-                  Кіру
+                <Button variant="secondary" size="lg" className="w-full" asChild>
+                  <Link href="/dashboard" onClick={() => setOpen(false)}>
+                    Кіру
+                  </Link>
                 </Button>
-                <Button variant="gradient" size="lg" className="w-full">
-                  Тегін бастау
+                <Button variant="gradient" size="lg" className="w-full" asChild>
+                  <Link href="/dashboard" onClick={() => setOpen(false)}>
+                    Тегін бастау
+                  </Link>
                 </Button>
               </div>
             </motion.div>

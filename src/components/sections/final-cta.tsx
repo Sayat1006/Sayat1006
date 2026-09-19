@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 
@@ -28,9 +29,11 @@ function FinalCta() {
               Бір тақырыптан бастаңыз — қалғанын S-AI толықтырады.
             </p>
             <div className="mt-9 flex justify-center">
-              <Button variant="gradient" size="lg">
-                <Sparkles className="size-4" />
-                S-AI-ды бастау
+              <Button variant="gradient" size="lg" asChild>
+                <Link href="/dashboard">
+                  <Sparkles className="size-4" />
+                  S-AI-ды бастау
+                </Link>
               </Button>
             </div>
           </div>
