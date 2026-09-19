@@ -18,7 +18,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toolTypeLabels } from "@/lib/dashboard/constants";
-import type { Material } from "@/lib/dashboard/types";
+import type { Material } from "@/lib/db/types";
+import { formatDate } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 
 interface MaterialCardProps {
@@ -64,7 +65,7 @@ function MaterialCard({
             <span aria-hidden>·</span>
             <span>{material.grade}-сынып</span>
             <span aria-hidden>·</span>
-            <span>{material.createdAt}</span>
+            <span>{formatDate(material.created_at)}</span>
           </span>
         </span>
       </button>
@@ -72,11 +73,11 @@ function MaterialCard({
       <button
         type="button"
         onClick={() => onToggleFavorite(material)}
-        aria-pressed={material.favorite}
-        aria-label={material.favorite ? "Таңдаулылардан алып тастау" : "Таңдаулыға қосу"}
+        aria-pressed={material.is_favorite}
+        aria-label={material.is_favorite ? "Таңдаулылардан алып тастау" : "Таңдаулыға қосу"}
         className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-primary/5"
       >
-        <Star className={cn("size-4.5", material.favorite && "fill-violet text-violet")} />
+        <Star className={cn("size-4.5", material.is_favorite && "fill-violet text-violet")} />
       </button>
 
       <DropdownMenu>

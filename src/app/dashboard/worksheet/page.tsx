@@ -9,12 +9,15 @@ import { SelectField } from "@/components/dashboard/select-field";
 import { FormField } from "@/components/dashboard/form-field";
 import { GenerationProgress } from "@/components/dashboard/generation-progress";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
+import { SaveMaterialButton } from "@/components/dashboard/save-material-button";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { GRADES, SUBJECTS, WORKSHEET_LEVELS } from "@/lib/dashboard/constants";
 import { buildWorksheetTasks } from "@/lib/dashboard/mock-data";
 import type { WorksheetTask } from "@/lib/dashboard/types";
 import { useGeneration } from "@/lib/dashboard/use-generation";
+import { chargeForGenerationAction, refundGenerationAction } from "@/lib/actions/tokens";
+import { TOKEN_COSTS } from "@/lib/tokens/costs";
 
 const TASK_COUNTS = ["4", "6", "8"];
 const generationSteps = ["Тақырыпты талдау", "Тапсырмаларды құрастыру", "Парақ форматын дайындау"];
@@ -29,9 +32,10 @@ export default function WorksheetPage() {
   const [tasks, setTasks] = useState<WorksheetTask[] | null>(null);
   const [editing, setEditing] = useState(false);
 
+  const [charging, setCharging] = useState(false);
   const { status, activeStep, start } = useGeneration(generationSteps, 500);
 
-  function generate() {
+  async function generate() {
     const nextErrors: Record<string, string> = {};
     if (!subject) nextErrors.subject = "Пәнді таңдаңыз";
     if (!grade) nextErrors.grade = "Сыныпты таңдаңыз";
@@ -42,10 +46,24 @@ export default function WorksheetPage() {
       return;
     }
 
+    setCharging(true);
+    const charge = await chargeForGenerationAction("worksheet");
+    setCharging(false);
+
+    if (!charge.success) {
+      toast.error(charge.error ?? "Токенді есептен шығару мүмкін болмады.");
+      return;
+    }
+
     setTasks(null);
     start(() => {
-      setTasks(buildWorksheetTasks({ topic, count: Number(taskCount) }));
-      toast.success("Жұмыс парағы дайын!");
+      try {
+        setTasks(buildWorksheetTasks({ topic, count: Number(taskCount) }));
+        toast.success(`Жұмыс парағы дайын! −${TOKEN_COSTS.worksheet} S-Token`);
+      } catch {
+        void refundGenerationAction("worksheet", charge.transactionId);
+        toast.error("Дайындау кезінде қате пайда болды. Токен қайтарылды.");
+      }
     });
   }
 
@@ -64,9 +82,15 @@ export default function WorksheetPage() {
           </FormField>
         </div>
 
-        <Button variant="gradient" size="lg" className="mt-6 w-full sm:w-auto" onClick={generate} disabled={status === "generating"}>
+        <Button
+          variant="gradient"
+          size="lg"
+          className="mt-6 w-full sm:w-auto"
+          onClick={generate}
+          disabled={status === "generating" || charging}
+        >
           <Sparkles className="size-4" />
-          Жұмыс парағын жасау
+          {charging ? "Тексерілуде..." : "Жұмыс парағын жасау"}
         </Button>
 
         {status === "generating" ? (
@@ -78,12 +102,22 @@ export default function WorksheetPage() {
 
       {status === "done" && tasks ? (
         <div className="space-y-4">
-          <ExportButtons
-            actions={["edit", "print", "pdf"]}
-            editing={editing}
-            onToggleEdit={() => setEditing((v) => !v)}
-            documentName={`Жұмыс парағы — ${topic}`}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <ExportButtons
+              actions={["edit", "print", "pdf"]}
+              editing={editing}
+              onToggleEdit={() => setEditing((v) => !v)}
+              documentName={`Жұмыс парағы — ${topic}`}
+            />
+            <SaveMaterialButton
+              type="worksheet"
+              title={topic}
+              subject={subject}
+              grade={grade}
+              content={{ tasks }}
+              metadata={{ level }}
+            />
+          </div>
 
           <div className="flex justify-center overflow-x-auto rounded-2xl bg-[#e7ebf1] p-4 sm:p-10">
             <div

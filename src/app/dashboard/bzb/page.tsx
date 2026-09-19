@@ -10,6 +10,7 @@ import { FormField } from "@/components/dashboard/form-field";
 import { GenerationProgress } from "@/components/dashboard/generation-progress";
 import { DocumentPreview } from "@/components/dashboard/document-preview";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
+import { SaveMaterialButton } from "@/components/dashboard/save-material-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ import { GRADES, QUARTERS, SUBJECTS } from "@/lib/dashboard/constants";
 import { buildAssessmentTasks } from "@/lib/dashboard/mock-data";
 import type { AssessmentTask } from "@/lib/dashboard/types";
 import { useGeneration } from "@/lib/dashboard/use-generation";
+import { chargeForGenerationAction, refundGenerationAction } from "@/lib/actions/tokens";
+import { TOKEN_COSTS } from "@/lib/tokens/costs";
 
 const generationSteps = [
   "Оқу мақсаттарын талдау",
@@ -34,9 +37,10 @@ export default function BzbPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [tasks, setTasks] = useState<AssessmentTask[] | null>(null);
 
+  const [charging, setCharging] = useState(false);
   const { status, activeStep, start } = useGeneration(generationSteps, 550);
 
-  function generate() {
+  async function generate() {
     const nextErrors: Record<string, string> = {};
     if (!subject) nextErrors.subject = "Пәнді таңдаңыз";
     if (!grade) nextErrors.grade = "Сыныпты таңдаңыз";
@@ -47,10 +51,24 @@ export default function BzbPage() {
       return;
     }
 
+    setCharging(true);
+    const charge = await chargeForGenerationAction("bzb");
+    setCharging(false);
+
+    if (!charge.success) {
+      toast.error(charge.error ?? "Токенді есептен шығару мүмкін болмады.");
+      return;
+    }
+
     setTasks(null);
     start(() => {
-      setTasks(buildAssessmentTasks({ topic: section, count: 4 }));
-      toast.success("БЖБ дайын!");
+      try {
+        setTasks(buildAssessmentTasks({ topic: section, count: 4 }));
+        toast.success(`БЖБ дайын! −${TOKEN_COSTS.bzb} S-Token`);
+      } catch {
+        void refundGenerationAction("bzb", charge.transactionId);
+        toast.error("Дайындау кезінде қате пайда болды. Токен қайтарылды.");
+      }
     });
   }
 
@@ -78,9 +96,15 @@ export default function BzbPage() {
           </FormField>
         </div>
 
-        <Button variant="gradient" size="lg" className="mt-6 w-full sm:w-auto" onClick={generate} disabled={status === "generating"}>
+        <Button
+          variant="gradient"
+          size="lg"
+          className="mt-6 w-full sm:w-auto"
+          onClick={generate}
+          disabled={status === "generating" || charging}
+        >
           <Sparkles className="size-4" />
-          БЖБ жасау
+          {charging ? "Тексерілуде..." : "БЖБ жасау"}
         </Button>
 
         {status === "generating" ? (
@@ -124,7 +148,17 @@ export default function BzbPage() {
             </div>
           </DocumentPreview>
 
-          <ExportButtons documentName={`БЖБ — ${section}`} />
+          <div className="flex flex-wrap items-center gap-2.5">
+            <ExportButtons documentName={`БЖБ — ${section}`} />
+            <SaveMaterialButton
+              type="bzb"
+              title={section}
+              subject={subject}
+              grade={grade}
+              content={{ tasks, totalPoints }}
+              metadata={{ quarter }}
+            />
+          </div>
         </>
       ) : null}
     </div>

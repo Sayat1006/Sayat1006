@@ -2,15 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings, User } from "lucide-react";
+import { signOut } from "next-auth/react";
+import { LogOut, Settings, User } from "lucide-react";
 
 import {
   dashboardBottomNav,
   dashboardLibraryNav,
   dashboardToolNav,
 } from "@/lib/dashboard/constants";
-import { teacherProfile, tokenBalance } from "@/lib/dashboard/mock-data";
 import { cn } from "@/lib/utils";
+
+interface DashboardSidebarProps {
+  userName: string;
+  userSubject: string;
+  tokenBalance: number;
+}
 
 function NavLink({
   href,
@@ -45,8 +51,9 @@ function NavLink({
   );
 }
 
-function DashboardSidebar() {
+function DashboardSidebar({ userName, userSubject, tokenBalance }: DashboardSidebarProps) {
   const pathname = usePathname();
+  const initial = userName.charAt(0).toUpperCase() || "S";
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/5 bg-primary lg:flex">
@@ -114,15 +121,24 @@ function DashboardSidebar() {
           className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-white/5"
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-cyan),var(--color-violet))] text-xs font-bold text-white">
-            {teacherProfile.name.charAt(0)}
+            {initial}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-medium text-white/85">
-              {teacherProfile.name}
+            <span className="block truncate text-sm font-medium text-white/85">{userName}</span>
+            <span className="block truncate text-xs text-white/40">
+              {userSubject ? `${userSubject} мұғалімі` : "Мұғалім"}
             </span>
-            <span className="block truncate text-xs text-white/40">{teacherProfile.subject} мұғалімі</span>
           </span>
         </Link>
+
+        <button
+          type="button"
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/50 transition-colors hover:bg-white/5 hover:text-white/85"
+        >
+          <LogOut className="size-[18px] shrink-0 text-white/40" />
+          Шығу
+        </button>
       </div>
     </aside>
   );

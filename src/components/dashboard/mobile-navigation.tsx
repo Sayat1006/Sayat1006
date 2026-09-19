@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 
 import {
   dashboardBottomNav,
@@ -12,10 +13,21 @@ import {
   dashboardToolNav,
   mobileTabNav,
 } from "@/lib/dashboard/constants";
-import { teacherProfile, tokenBalance } from "@/lib/dashboard/mock-data";
 import { cn } from "@/lib/utils";
 
-function MobileTopBar({ onOpenMenu }: { onOpenMenu: () => void }) {
+interface UserSummary {
+  userName: string;
+  userSubject: string;
+  tokenBalance: number;
+}
+
+function MobileTopBar({
+  tokenBalance,
+  onOpenMenu,
+}: {
+  tokenBalance: number;
+  onOpenMenu: () => void;
+}) {
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-primary/8 bg-surface/95 px-4 backdrop-blur lg:hidden">
       <Link href="/dashboard" className="flex items-center gap-2">
@@ -74,8 +86,17 @@ function MobileBottomNav() {
   );
 }
 
-function MobileMenuDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+function MobileMenuDrawer({
+  open,
+  onClose,
+  userName,
+  userSubject,
+}: {
+  open: boolean;
+  onClose: () => void;
+} & UserSummary) {
   const pathname = usePathname();
+  const initial = userName.charAt(0).toUpperCase() || "S";
 
   useEffect(() => {
     if (!open) return;
@@ -132,13 +153,13 @@ function MobileMenuDrawer({ open, onClose }: { open: boolean; onClose: () => voi
 
             <div className="mt-4 flex items-center gap-2.5 rounded-xl bg-white/5 px-3 py-2.5">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-cyan),var(--color-violet))] text-xs font-bold text-white">
-                {teacherProfile.name.charAt(0)}
+                {initial}
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-white/90">
-                  {teacherProfile.name}
+                <span className="block truncate text-sm font-medium text-white/90">{userName}</span>
+                <span className="block truncate text-xs text-white/40">
+                  {userSubject ? `${userSubject} мұғалімі` : "Мұғалім"}
                 </span>
-                <span className="block truncate text-xs text-white/40">{teacherProfile.subject} мұғалімі</span>
               </span>
             </div>
 
@@ -175,6 +196,14 @@ function MobileMenuDrawer({ open, onClose }: { open: boolean; onClose: () => voi
                   {item.label}
                 </Link>
               ))}
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-medium text-white/60 transition-colors hover:bg-white/5 hover:text-white/90"
+              >
+                <LogOut className="size-[18px] text-white/40" />
+                Шығу
+              </button>
             </div>
           </motion.div>
         </motion.div>
@@ -183,13 +212,19 @@ function MobileMenuDrawer({ open, onClose }: { open: boolean; onClose: () => voi
   );
 }
 
-function MobileNavigation() {
+function MobileNavigation({ userName, userSubject, tokenBalance }: UserSummary) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <MobileTopBar onOpenMenu={() => setOpen(true)} />
-      <MobileMenuDrawer open={open} onClose={() => setOpen(false)} />
+      <MobileTopBar tokenBalance={tokenBalance} onOpenMenu={() => setOpen(true)} />
+      <MobileMenuDrawer
+        open={open}
+        onClose={() => setOpen(false)}
+        userName={userName}
+        userSubject={userSubject}
+        tokenBalance={tokenBalance}
+      />
       <MobileBottomNav />
     </>
   );

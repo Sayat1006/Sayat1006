@@ -3,35 +3,19 @@ import type {
   ChatMessage,
   CreditPackage,
   LessonStage,
-  Material,
   QmjContent,
   ScenarioSection,
   Slide,
-  TeacherProfile,
   TestQuestion,
-  TokenTransaction,
   WorksheetTask,
 } from "@/lib/dashboard/types";
 
-export const teacherProfile: TeacherProfile = {
-  name: "Айгерім Нұрланқызы",
-  subject: "Физика",
-  school: "№45 мектеп-гимназиясы, Алматы",
-  grades: ["7", "8", "9"],
-  language: "Қазақша",
-  email: "aigerim.nurlan@example.kz",
-};
-
-export const tokenBalance = 50;
-
-export const tokenTransactions: TokenTransaction[] = [
-  { id: "t1", label: "ҚМЖ жасау — «Жылу құбылыстары»", amount: -5, date: "18 қыркүйек" },
-  { id: "t2", label: "Тест жасау — «Ньютон заңдары»", amount: -2, date: "17 қыркүйек" },
-  { id: "t3", label: "Презентация — «Электр тогы»", amount: -8, date: "15 қыркүйек" },
-  { id: "t4", label: "Жұмыс парағы — «Қысым»", amount: -3, date: "12 қыркүйек" },
-  { id: "t5", label: "Айлық бонус", amount: 20, date: "1 қыркүйек" },
-  { id: "t6", label: "БЖБ жасау — «Механика»", amount: -6, date: "28 тамыз" },
-];
+// Note: teacher profile, token balance/history, and the materials library
+// are now real, per-user data loaded from Supabase (see lib/services/*)
+// instead of the Stage 2 mock arrays that used to live here. What remains
+// below is genuinely mock: placeholder pricing copy, the assistant's
+// canned replies, and the content generators that stand in for a real AI
+// call — none of that is user data, so it stays mock by design.
 
 export const creditPackages: CreditPackage[] = [
   {
@@ -53,17 +37,6 @@ export const creditPackages: CreditPackage[] = [
     price: "—",
     description: "Барлық құралды шектеусіз пайдаланатын мұғалімге.",
   },
-];
-
-export const materials: Material[] = [
-  { id: "m1", title: "Жылу құбылыстары", type: "qmj", subject: "Физика", grade: "8", createdAt: "18 қыркүйек 2026", favorite: true },
-  { id: "m2", title: "Ньютон заңдары", type: "test", subject: "Физика", grade: "9", createdAt: "17 қыркүйек 2026", favorite: false },
-  { id: "m3", title: "Электр тогы", type: "presentation", subject: "Физика", grade: "8", createdAt: "15 қыркүйек 2026", favorite: true },
-  { id: "m4", title: "Қысым және оның бірліктері", type: "worksheet", subject: "Физика", grade: "7", createdAt: "12 қыркүйек 2026", favorite: false },
-  { id: "m5", title: "Механика негіздері", type: "bzb", subject: "Физика", grade: "9", createdAt: "28 тамыз 2026", favorite: false },
-  { id: "m6", title: "Дыбыс құбылыстары", type: "tzb", subject: "Физика", grade: "8", createdAt: "20 тамыз 2026", favorite: false },
-  { id: "m7", title: "Оптика: жарық сыну", type: "scenario", subject: "Физика", grade: "9", createdAt: "14 тамыз 2026", favorite: true },
-  { id: "m8", title: "Атом құрылысы", type: "qmj", subject: "Химия", grade: "8", createdAt: "10 тамыз 2026", favorite: false },
 ];
 
 export const lessonStages: LessonStage[] = [

@@ -11,6 +11,7 @@ import { FormField } from "@/components/dashboard/form-field";
 import { GenerationProgress } from "@/components/dashboard/generation-progress";
 import { DocumentPreview } from "@/components/dashboard/document-preview";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
+import { SaveMaterialButton } from "@/components/dashboard/save-material-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,8 @@ import {
 import { buildQmjContent, lessonStages, defaultSelectedStageIds } from "@/lib/dashboard/mock-data";
 import type { QmjContent } from "@/lib/dashboard/types";
 import { useGeneration } from "@/lib/dashboard/use-generation";
+import { chargeForGenerationAction, refundGenerationAction } from "@/lib/actions/tokens";
+import { TOKEN_COSTS } from "@/lib/tokens/costs";
 import { cn } from "@/lib/utils";
 
 const steps = ["Негізгі ақпарат", "Оқу мақсаты", "Сабақ құрылымы", "Дайын нәтиже"];
@@ -61,6 +64,7 @@ export default function QmjPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [content, setContent] = useState<QmjContent | null>(null);
   const [editing, setEditing] = useState(false);
+  const [charging, setCharging] = useState(false);
 
   const { status, activeStep, start } = useGeneration(generationSteps, 500);
 
@@ -68,7 +72,7 @@ export default function QmjPage() {
     setStageIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   }
 
-  function goNext() {
+  async function goNext() {
     if (step === 1) {
       const nextErrors: Record<string, string> = {};
       if (!step1.subject) nextErrors.subject = "Пәнді таңдаңыз";
@@ -95,22 +99,37 @@ export default function QmjPage() {
         toast.error("Кемінде бір сабақ кезеңін таңдаңыз");
         return;
       }
+
+      setCharging(true);
+      const charge = await chargeForGenerationAction("qmj");
+      setCharging(false);
+
+      if (!charge.success) {
+        toast.error(charge.error ?? "Токенді есептен шығару мүмкін болмады.");
+        return;
+      }
+
       setStep(4);
       start(() => {
-        const stageLabels = lessonStages
-          .filter((s) => stageIds.includes(s.id))
-          .map((s) => s.label);
-        setContent(
-          buildQmjContent({
-            subject: step1.subject,
-            grade: step1.grade,
-            topic: step1.topic,
-            objective: step2.objective,
-            goal: step2.goal,
-            stageLabels,
-          }),
-        );
-        toast.success("ҚМЖ дайын!");
+        try {
+          const stageLabels = lessonStages
+            .filter((s) => stageIds.includes(s.id))
+            .map((s) => s.label);
+          setContent(
+            buildQmjContent({
+              subject: step1.subject,
+              grade: step1.grade,
+              topic: step1.topic,
+              objective: step2.objective,
+              goal: step2.goal,
+              stageLabels,
+            }),
+          );
+          toast.success(`ҚМЖ дайын! −${TOKEN_COSTS.qmj} S-Token`);
+        } catch {
+          void refundGenerationAction("qmj", charge.transactionId);
+          toast.error("Дайындау кезінде қате пайда болды. Токен қайтарылды.");
+        }
       });
       return;
     }
@@ -361,12 +380,22 @@ export default function QmjPage() {
                 </div>
               </DocumentPreview>
 
-              <ExportButtons
-                editing={editing}
-                onToggleEdit={() => setEditing((v) => !v)}
-                copyText={copyText}
-                documentName={`ҚМЖ — ${content.topic}`}
-              />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <ExportButtons
+                  editing={editing}
+                  onToggleEdit={() => setEditing((v) => !v)}
+                  copyText={copyText}
+                  documentName={`ҚМЖ — ${content.topic}`}
+                />
+                <SaveMaterialButton
+                  type="qmj"
+                  title={content.topic}
+                  subject={step1.subject}
+                  grade={step1.grade}
+                  content={{ ...content }}
+                  metadata={{ duration: step1.duration, lessonType: step1.lessonType }}
+                />
+              </div>
             </>
           ) : null}
         </div>
@@ -378,11 +407,11 @@ export default function QmjPage() {
             <ArrowLeft className="size-4" />
             Артқа
           </Button>
-          <Button variant="gradient" onClick={goNext}>
+          <Button variant="gradient" onClick={goNext} disabled={charging}>
             {step === 3 ? (
               <>
                 <Sparkles className="size-4" />
-                ҚМЖ жасау
+                {charging ? "Тексерілуде..." : "ҚМЖ жасау"}
               </>
             ) : (
               <>

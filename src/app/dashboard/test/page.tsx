@@ -9,6 +9,7 @@ import { SelectField } from "@/components/dashboard/select-field";
 import { FormField } from "@/components/dashboard/form-field";
 import { GenerationProgress } from "@/components/dashboard/generation-progress";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
+import { SaveMaterialButton } from "@/components/dashboard/save-material-button";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,8 @@ import {
 import { buildTestQuestions } from "@/lib/dashboard/mock-data";
 import type { TestQuestion } from "@/lib/dashboard/types";
 import { useGeneration } from "@/lib/dashboard/use-generation";
+import { chargeForGenerationAction, refundGenerationAction } from "@/lib/actions/tokens";
+import { TOKEN_COSTS } from "@/lib/tokens/costs";
 import { cn } from "@/lib/utils";
 
 const QUESTION_COUNTS = ["5", "10", "15", "20"];
@@ -42,6 +45,7 @@ export default function TestPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [questions, setQuestions] = useState<TestQuestion[] | null>(null);
 
+  const [charging, setCharging] = useState(false);
   const { status, activeStep, start } = useGeneration(generationSteps, 550);
 
   function toggleType(value: string) {
@@ -50,7 +54,7 @@ export default function TestPage() {
     );
   }
 
-  function generate() {
+  async function generate() {
     const nextErrors: Record<string, string> = {};
     if (!subject) nextErrors.subject = "Пәнді таңдаңыз";
     if (!grade) nextErrors.grade = "Сыныпты таңдаңыз";
@@ -62,10 +66,24 @@ export default function TestPage() {
       return;
     }
 
+    setCharging(true);
+    const charge = await chargeForGenerationAction("test");
+    setCharging(false);
+
+    if (!charge.success) {
+      toast.error(charge.error ?? "Токенді есептен шығару мүмкін болмады.");
+      return;
+    }
+
     setQuestions(null);
     start(() => {
-      setQuestions(buildTestQuestions({ topic, count: Number(count), types: selectedTypes }));
-      toast.success("Тест дайын!");
+      try {
+        setQuestions(buildTestQuestions({ topic, count: Number(count), types: selectedTypes }));
+        toast.success(`Тест дайын! −${TOKEN_COSTS.test} S-Token`);
+      } catch {
+        void refundGenerationAction("test", charge.transactionId);
+        toast.error("Дайындау кезінде қате пайда болды. Токен қайтарылды.");
+      }
     });
   }
 
@@ -141,9 +159,15 @@ export default function TestPage() {
           </div>
         </FormField>
 
-        <Button variant="gradient" size="lg" className="mt-6 w-full sm:w-auto" onClick={generate} disabled={status === "generating"}>
+        <Button
+          variant="gradient"
+          size="lg"
+          className="mt-6 w-full sm:w-auto"
+          onClick={generate}
+          disabled={status === "generating" || charging}
+        >
           <Sparkles className="size-4" />
-          Тест жасау
+          {charging ? "Тексерілуде..." : "Тест жасау"}
         </Button>
 
         {status === "generating" ? (
@@ -164,7 +188,7 @@ export default function TestPage() {
                 <Plus className="size-3.5" />
                 Жаңа сұрақ
               </Button>
-              <Button variant="secondary" size="sm" onClick={generate}>
+              <Button variant="secondary" size="sm" onClick={generate} disabled={charging}>
                 <RotateCcw className="size-3.5" />
                 Қайта жасау
               </Button>
@@ -173,6 +197,14 @@ export default function TestPage() {
                 Көшіру
               </Button>
               <ExportButtons actions={["docx"]} documentName={`Тест — ${topic}`} />
+              <SaveMaterialButton
+                type="test"
+                title={topic}
+                subject={subject}
+                grade={grade}
+                content={{ questions }}
+                metadata={{ difficulty }}
+              />
             </div>
           </div>
 

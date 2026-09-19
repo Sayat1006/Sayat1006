@@ -10,12 +10,15 @@ import { FormField } from "@/components/dashboard/form-field";
 import { GenerationProgress } from "@/components/dashboard/generation-progress";
 import { DocumentPreview } from "@/components/dashboard/document-preview";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
+import { SaveMaterialButton } from "@/components/dashboard/save-material-button";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { GRADES, LESSON_DURATIONS, LESSON_TYPES, SUBJECTS } from "@/lib/dashboard/constants";
 import { buildScenarioSections } from "@/lib/dashboard/mock-data";
 import type { ScenarioSection } from "@/lib/dashboard/types";
 import { useGeneration } from "@/lib/dashboard/use-generation";
+import { chargeForGenerationAction, refundGenerationAction } from "@/lib/actions/tokens";
+import { TOKEN_COSTS } from "@/lib/tokens/costs";
 
 const generationSteps = [
   "Сабақ құрылымын жоспарлау",
@@ -32,9 +35,10 @@ export default function ScenarioPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [sections, setSections] = useState<ScenarioSection[] | null>(null);
 
+  const [charging, setCharging] = useState(false);
   const { status, activeStep, start } = useGeneration(generationSteps, 550);
 
-  function generate() {
+  async function generate() {
     const nextErrors: Record<string, string> = {};
     if (!subject) nextErrors.subject = "Пәнді таңдаңыз";
     if (!grade) nextErrors.grade = "Сыныпты таңдаңыз";
@@ -45,10 +49,24 @@ export default function ScenarioPage() {
       return;
     }
 
+    setCharging(true);
+    const charge = await chargeForGenerationAction("scenario");
+    setCharging(false);
+
+    if (!charge.success) {
+      toast.error(charge.error ?? "Токенді есептен шығару мүмкін болмады.");
+      return;
+    }
+
     setSections(null);
     start(() => {
-      setSections(buildScenarioSections({ topic }));
-      toast.success("Сабақ сценарийі дайын!");
+      try {
+        setSections(buildScenarioSections({ topic }));
+        toast.success(`Сабақ сценарийі дайын! −${TOKEN_COSTS.scenario} S-Token`);
+      } catch {
+        void refundGenerationAction("scenario", charge.transactionId);
+        toast.error("Дайындау кезінде қате пайда болды. Токен қайтарылды.");
+      }
     });
   }
 
@@ -67,9 +85,15 @@ export default function ScenarioPage() {
           </FormField>
         </div>
 
-        <Button variant="gradient" size="lg" className="mt-6 w-full sm:w-auto" onClick={generate} disabled={status === "generating"}>
+        <Button
+          variant="gradient"
+          size="lg"
+          className="mt-6 w-full sm:w-auto"
+          onClick={generate}
+          disabled={status === "generating" || charging}
+        >
           <Sparkles className="size-4" />
-          Сценарий жасау
+          {charging ? "Тексерілуде..." : "Сценарий жасау"}
         </Button>
 
         {status === "generating" ? (
@@ -101,7 +125,17 @@ export default function ScenarioPage() {
             </div>
           </DocumentPreview>
 
-          <ExportButtons documentName={`Сценарий — ${topic}`} />
+          <div className="flex flex-wrap items-center gap-2.5">
+            <ExportButtons documentName={`Сценарий — ${topic}`} />
+            <SaveMaterialButton
+              type="scenario"
+              title={topic}
+              subject={subject}
+              grade={grade}
+              content={{ sections }}
+              metadata={{ duration, lessonType }}
+            />
+          </div>
         </>
       ) : null}
     </div>

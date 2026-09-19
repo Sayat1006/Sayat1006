@@ -1,190 +1,64 @@
-"use client";
-
-import { useState } from "react";
-import { Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { redirect } from "next/navigation";
+import { Coins, FolderKanban, Star } from "lucide-react";
 
 import { DashboardHeader } from "@/components/dashboard/header";
 import { ToolCard } from "@/components/dashboard/tool-card";
-import { GenerationProgress } from "@/components/dashboard/generation-progress";
-import { GenerationResult } from "@/components/dashboard/generation-result";
-import { SelectField } from "@/components/dashboard/select-field";
-import { FormField } from "@/components/dashboard/form-field";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import {
-  DIFFICULTIES,
-  GRADES,
-  LANGUAGES,
-  LESSON_DURATIONS,
-  SUBJECTS,
-  toolCards,
-} from "@/lib/dashboard/constants";
-import { teacherProfile } from "@/lib/dashboard/mock-data";
-import { useGeneration } from "@/lib/dashboard/use-generation";
+import { QuickLessonCreator } from "@/components/dashboard/quick-lesson-creator";
+import { RecentMaterials } from "@/components/dashboard/recent-materials";
+import { toolCards } from "@/lib/dashboard/constants";
+import { getCurrentUser } from "@/lib/auth/session";
+import { getProfile } from "@/lib/services/profile";
+import { getMaterialStats, getRecentMaterials } from "@/lib/services/materials";
+import { getTokenBalance } from "@/lib/services/tokens";
 
-const generationSteps = [
-  "Тақырыпты талдау…",
-  "Оқу мақсатын сәйкестендіру…",
-  "Тапсырмаларды құрастыру…",
-  "Бағалау критерийлерін дайындау…",
-  "Материалдарды жинақтау…",
-];
+export default async function DashboardHomePage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
 
-const resultItems = ["ҚМЖ", "Презентация жоспары", "Тест", "Жұмыс парағы", "Үй тапсырмасы"];
+  const [profile, stats, recentMaterials, tokenBalance] = await Promise.all([
+    getProfile(user.id),
+    getMaterialStats(user.id),
+    getRecentMaterials(user.id, 5),
+    getTokenBalance(user.id),
+  ]);
 
-interface FormState {
-  subject: string;
-  grade: string;
-  topic: string;
-  duration: string;
-  objective: string;
-  language: string;
-  difficulty: string;
-}
+  const firstName = (profile?.full_name?.trim() || user.email.split("@")[0]).split(" ")[0];
 
-const initialForm: FormState = {
-  subject: "",
-  grade: "",
-  topic: "",
-  duration: LESSON_DURATIONS[1],
-  objective: "",
-  language: LANGUAGES[0],
-  difficulty: DIFFICULTIES[0],
-};
-
-export default function DashboardHomePage() {
-  const [form, setForm] = useState<FormState>(initialForm);
-  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
-  const { status, activeStep, start, reset } = useGeneration(generationSteps, 550);
-
-  function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setErrors((prev) => ({ ...prev, [key]: undefined }));
-  }
-
-  function handleGenerate() {
-    const nextErrors: Partial<Record<keyof FormState, string>> = {};
-    if (!form.subject) nextErrors.subject = "Пәнді таңдаңыз";
-    if (!form.grade) nextErrors.grade = "Сыныпты таңдаңыз";
-    if (!form.topic.trim()) nextErrors.topic = "Тақырыпты жазыңыз";
-
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors);
-      toast.error("Формада қателер бар", { description: "Міндетті өрістерді толтырыңыз." });
-      return;
-    }
-
-    start(() => {
-      toast.success("Сабақ пакеті дайын!");
-    });
-  }
+  const statCards = [
+    { icon: FolderKanban, label: "Материалдар", value: stats.total },
+    { icon: Star, label: "Таңдаулылар", value: stats.favorites },
+    { icon: Coins, label: "S-Tokens", value: tokenBalance },
+  ];
 
   return (
     <div className="space-y-10">
       <DashboardHeader
-        title={`Қайырлы күн, ${teacherProfile.name.split(" ")[0]}! \u{1F44B}`}
+        title={`Қайырлы күн, ${firstName}! \u{1F44B}`}
         description="Бүгін қандай сабақ дайындаймыз?"
       />
 
-      <section
-        id="quick-lesson"
-        className="scroll-mt-24 rounded-2xl border border-primary/10 bg-surface p-5 shadow-soft sm:p-7"
-      >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-display text-xl font-bold text-primary">Жаңа сабақ</h2>
-            <p className="mt-1 text-sm text-muted">
-              Параметрлерді толтырыңыз — S-AI толық сабақ пакетін дайындайды.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <SelectField
-            label="Пән"
-            options={SUBJECTS}
-            value={form.subject}
-            onChange={(v) => updateField("subject", v)}
-            error={errors.subject}
-            required
-          />
-          <SelectField
-            label="Сынып"
-            options={GRADES}
-            value={form.grade}
-            onChange={(v) => updateField("grade", v)}
-            error={errors.grade}
-            required
-          />
-          <FormField label="Тақырып" error={errors.topic} required className="sm:col-span-2">
-            <Input
-              value={form.topic}
-              onChange={(e) => updateField("topic", e.target.value)}
-              placeholder="Мысалы: Жылу құбылыстары"
-              aria-invalid={Boolean(errors.topic)}
-            />
-          </FormField>
-          <SelectField
-            label="Сабақ ұзақтығы"
-            options={LESSON_DURATIONS}
-            value={form.duration}
-            onChange={(v) => updateField("duration", v)}
-          />
-          <SelectField
-            label="Тіл"
-            options={LANGUAGES}
-            value={form.language}
-            onChange={(v) => updateField("language", v)}
-          />
-          <FormField label="Оқу мақсаты" className="sm:col-span-2">
-            <Textarea
-              value={form.objective}
-              onChange={(e) => updateField("objective", e.target.value)}
-              placeholder="Оқу мақсатын жазыңыз (міндетті емес)"
-              rows={3}
-            />
-          </FormField>
-          <SelectField
-            label="Күрделілік"
-            options={DIFFICULTIES}
-            value={form.difficulty}
-            onChange={(v) => updateField("difficulty", v)}
-            className="sm:col-span-2"
-          />
-        </div>
-
-        <div className="mt-6">
-          <Button
-            variant="gradient"
-            size="lg"
-            onClick={handleGenerate}
-            disabled={status === "generating"}
-            className="w-full sm:w-auto"
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {statCards.map((stat) => (
+          <div
+            key={stat.label}
+            className="flex items-center gap-3.5 rounded-2xl border border-primary/8 bg-surface p-5 shadow-soft"
           >
-            <Sparkles className="size-4" />
-            Сабақ пакетін жасау
-          </Button>
-        </div>
-
-        {status !== "idle" ? (
-          <div className="mt-6 rounded-2xl border border-primary/8 bg-[#fbfcfe] p-5 sm:p-6">
-            {status === "generating" ? (
-              <GenerationProgress steps={generationSteps} activeStep={activeStep} />
-            ) : (
-              <div>
-                <p className="font-display mb-4 text-base font-bold text-success">
-                  Сабақ пакеті дайын!
-                </p>
-                <GenerationResult items={resultItems} />
-                <Button variant="ghost" size="sm" className="mt-4" onClick={reset}>
-                  Жаңа сабақ бастау
-                </Button>
-              </div>
-            )}
+            <span className="inline-flex size-11 items-center justify-center rounded-xl bg-primary/5 text-primary">
+              <stat.icon className="size-5" />
+            </span>
+            <div>
+              <p className="font-display text-2xl font-bold text-primary">{stat.value}</p>
+              <p className="text-xs text-muted">{stat.label}</p>
+            </div>
           </div>
-        ) : null}
+        ))}
+      </div>
+
+      <QuickLessonCreator />
+
+      <section>
+        <h2 className="font-display mb-4 text-lg font-bold text-primary">Соңғы материалдар</h2>
+        <RecentMaterials materials={recentMaterials} />
       </section>
 
       <section>

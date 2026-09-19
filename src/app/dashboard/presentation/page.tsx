@@ -17,6 +17,7 @@ import { FormField } from "@/components/dashboard/form-field";
 import { GenerationProgress } from "@/components/dashboard/generation-progress";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
+import { SaveMaterialButton } from "@/components/dashboard/save-material-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,8 @@ import {
 import { buildSlides } from "@/lib/dashboard/mock-data";
 import type { Slide } from "@/lib/dashboard/types";
 import { useGeneration } from "@/lib/dashboard/use-generation";
+import { chargeForGenerationAction, refundGenerationAction } from "@/lib/actions/tokens";
+import { TOKEN_COSTS } from "@/lib/tokens/costs";
 import { cn } from "@/lib/utils";
 
 const SLIDE_COUNTS = ["6", "8", "10", "12"];
@@ -52,9 +55,10 @@ export default function PresentationPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Slide | null>(null);
 
+  const [charging, setCharging] = useState(false);
   const { status, activeStep, start, reset } = useGeneration(generationSteps, 500);
 
-  function handleGenerate() {
+  async function handleGenerate() {
     const nextErrors: Record<string, string> = {};
     if (!subject) nextErrors.subject = "Пәнді таңдаңыз";
     if (!grade) nextErrors.grade = "Сыныпты таңдаңыз";
@@ -65,12 +69,26 @@ export default function PresentationPage() {
       return;
     }
 
+    setCharging(true);
+    const charge = await chargeForGenerationAction("presentation");
+    setCharging(false);
+
+    if (!charge.success) {
+      toast.error(charge.error ?? "Токенді есептен шығару мүмкін болмады.");
+      return;
+    }
+
     setSlides(null);
     start(() => {
-      const generated = buildSlides({ topic, count: Number(slideCount) });
-      setSlides(generated);
-      setSelectedId(generated[0]?.id ?? null);
-      toast.success("Презентация дайын!");
+      try {
+        const generated = buildSlides({ topic, count: Number(slideCount) });
+        setSlides(generated);
+        setSelectedId(generated[0]?.id ?? null);
+        toast.success(`Презентация дайын! −${TOKEN_COSTS.presentation} S-Token`);
+      } catch {
+        void refundGenerationAction("presentation", charge.transactionId);
+        toast.error("Дайындау кезінде қате пайда болды. Токен қайтарылды.");
+      }
     });
   }
 
@@ -139,9 +157,15 @@ export default function PresentationPage() {
           <SelectField label="Тіл" options={LANGUAGES} value={language} onChange={setLanguage} />
         </div>
 
-        <Button variant="gradient" size="lg" className="mt-6 w-full sm:w-auto" onClick={handleGenerate} disabled={status === "generating"}>
+        <Button
+          variant="gradient"
+          size="lg"
+          className="mt-6 w-full sm:w-auto"
+          onClick={handleGenerate}
+          disabled={status === "generating" || charging}
+        >
           <Sparkles className="size-4" />
-          Презентация жасау
+          {charging ? "Тексерілуде..." : "Презентация жасау"}
         </Button>
 
         {status === "generating" ? (
@@ -157,7 +181,17 @@ export default function PresentationPage() {
             <h2 className="font-display text-lg font-bold text-primary">
               Слайдтар ({slides.length})
             </h2>
-            <ExportButtons actions={["docx", "pdf"]} documentName={`Презентация — ${topic}`} />
+            <div className="flex flex-wrap items-center gap-2.5">
+              <ExportButtons actions={["docx", "pdf"]} documentName={`Презентация — ${topic}`} />
+              <SaveMaterialButton
+                type="presentation"
+                title={topic}
+                subject={subject}
+                grade={grade}
+                content={{ slides }}
+                metadata={{ style, language }}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">

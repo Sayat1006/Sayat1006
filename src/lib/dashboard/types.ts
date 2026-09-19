@@ -23,23 +23,6 @@ export interface ToolCardData {
   icon: LucideIcon;
 }
 
-export interface Material {
-  id: string;
-  title: string;
-  type: ToolType;
-  subject: string;
-  grade: string;
-  createdAt: string;
-  favorite: boolean;
-}
-
-export interface TokenTransaction {
-  id: string;
-  label: string;
-  amount: number;
-  date: string;
-}
-
 export interface CreditPackage {
   name: string;
   tokens: number;
@@ -54,15 +37,6 @@ export interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
-}
-
-export interface TeacherProfile {
-  name: string;
-  subject: string;
-  school: string;
-  grades: string[];
-  language: string;
-  email: string;
 }
 
 export interface LessonStage {

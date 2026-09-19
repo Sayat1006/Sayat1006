@@ -10,12 +10,15 @@ import { FormField } from "@/components/dashboard/form-field";
 import { GenerationProgress } from "@/components/dashboard/generation-progress";
 import { DocumentPreview } from "@/components/dashboard/document-preview";
 import { ExportButtons } from "@/components/dashboard/export-buttons";
+import { SaveMaterialButton } from "@/components/dashboard/save-material-button";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { GRADES, QUARTERS, SUBJECTS } from "@/lib/dashboard/constants";
 import { buildAssessmentTasks } from "@/lib/dashboard/mock-data";
 import type { AssessmentTask } from "@/lib/dashboard/types";
 import { useGeneration } from "@/lib/dashboard/use-generation";
+import { chargeForGenerationAction, refundGenerationAction } from "@/lib/actions/tokens";
+import { TOKEN_COSTS } from "@/lib/tokens/costs";
 
 const generationSteps = [
   "Бөлімдерді талдау",
@@ -38,9 +41,10 @@ export default function TzbPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [results, setResults] = useState<SectionResult[] | null>(null);
 
+  const [charging, setCharging] = useState(false);
   const { status, activeStep, start } = useGeneration(generationSteps, 550);
 
-  function generate() {
+  async function generate() {
     const sections = sectionsText
       .split("\n")
       .map((s) => s.trim())
@@ -56,15 +60,29 @@ export default function TzbPage() {
       return;
     }
 
+    setCharging(true);
+    const charge = await chargeForGenerationAction("tzb");
+    setCharging(false);
+
+    if (!charge.success) {
+      toast.error(charge.error ?? "Токенді есептен шығару мүмкін болмады.");
+      return;
+    }
+
     setResults(null);
     start(() => {
-      setResults(
-        sections.map((section) => ({
-          section,
-          tasks: buildAssessmentTasks({ topic: section, count: 2 }),
-        })),
-      );
-      toast.success("ТЖБ дайын!");
+      try {
+        setResults(
+          sections.map((section) => ({
+            section,
+            tasks: buildAssessmentTasks({ topic: section, count: 2 }),
+          })),
+        );
+        toast.success(`ТЖБ дайын! −${TOKEN_COSTS.tzb} S-Token`);
+      } catch {
+        void refundGenerationAction("tzb", charge.transactionId);
+        toast.error("Дайындау кезінде қате пайда болды. Токен қайтарылды.");
+      }
     });
   }
 
@@ -109,9 +127,15 @@ export default function TzbPage() {
           />
         </FormField>
 
-        <Button variant="gradient" size="lg" className="mt-6 w-full sm:w-auto" onClick={generate} disabled={status === "generating"}>
+        <Button
+          variant="gradient"
+          size="lg"
+          className="mt-6 w-full sm:w-auto"
+          onClick={generate}
+          disabled={status === "generating" || charging}
+        >
           <Sparkles className="size-4" />
-          ТЖБ жасау
+          {charging ? "Тексерілуде..." : "ТЖБ жасау"}
         </Button>
 
         {status === "generating" ? (
@@ -179,7 +203,17 @@ export default function TzbPage() {
             </div>
           </DocumentPreview>
 
-          <ExportButtons documentName={`ТЖБ — ${quarter}`} />
+          <div className="flex flex-wrap items-center gap-2.5">
+            <ExportButtons documentName={`ТЖБ — ${quarter}`} />
+            <SaveMaterialButton
+              type="tzb"
+              title={`${quarter} — ТЖБ`}
+              subject={subject}
+              grade={grade}
+              content={{ results, totalPoints }}
+              metadata={{ quarter }}
+            />
+          </div>
         </>
       ) : null}
     </div>
